@@ -252,6 +252,7 @@ class RMMNumbaManager(BaseCUDAMemoryManager):
         ptr = ctypes.c_uint64(int(addr))
         finalizer = _make_finalizer(addr, stream)
         mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
+        print(csv_log())
         return mem
 
     def memhostalloc(self, bytesize, mapped, portable, wc):
@@ -261,8 +262,8 @@ class RMMNumbaManager(BaseCUDAMemoryManager):
         raise NotImplementedError
 
     def prepare_for_use(self, memory_info):
-        reinitialize(logging=True)
         if self.deallocations is None:
+            reinitialize(logging=True)
             free, total = get_info()
             self.deallocations = _PendingDeallocs(total)
 
@@ -422,6 +423,7 @@ def _make_finalizer(handle, stream):
         Invoked when the MemoryPointer is freed
         """
         librmm.rmm_free(handle, stream)
+        print(csv_log())
 
     return finalizer
 
