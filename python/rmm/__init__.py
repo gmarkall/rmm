@@ -31,6 +31,7 @@ from rmm.rmm import (
     reinitialize,
     to_device,
     rmm_cupy_allocator,
+    use_rmm_for_numba,
 )
 
 from rmm._lib.device_buffer import DeviceBuffer

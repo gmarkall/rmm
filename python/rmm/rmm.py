@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import ctypes
+import logging
+import sys
+from collections import deque
 from enum import IntEnum
 
 import numpy as np
 from numba import cuda
-
+from numba.cuda.cudadrv.memory import BaseCUDAMemoryManager
+from numba.utils import UniqueDict, logger_hasHandlers
 import rmm._lib as librmm
 
 
@@ -273,6 +278,144 @@ def get_info(stream=0):
     the stream as a namedtuple with members `free` and `total`.
     """
     return librmm.rmm_getinfo(stream)
+
+
+class RMMNumbaManager(BaseCUDAMemoryManager):
+    def __init__(self):
+        self.allocations = UniqueDict()
+        # Deallocations lazily initialised when context activated
+        self.deallocations = None
+
+    def memalloc(self, bytesize):
+        # XXX: Need to support stream being passed in
+        stream = 0
+        addr = librmm.rmm_alloc(bytesize, stream)
+        return addr
+
+    def memhostalloc(self, bytesize, mapped, portable, wc):
+        raise NotImplementedError
+
+    def mempin(self, owner, pointer, size, mapped):
+        raise NotImplementedError
+
+    def prepare_for_use(self, memory_info):
+        reinitialize(logging=True)
+        if self.deallocations is None:
+            self.deallocations = _PendingDeallocs()
+
+
+def _make_logger():
+    logger = logging.getLogger(__name__)
+    # is logging configured?
+    if not logger_hasHandlers(logger):
+        # read user config
+        # lvl = '' # str(config.CUDA_LOG_LEVEL).upper()
+        # lvl = getattr(logging, lvl, None)
+        lvl = logging.CRITICAL
+        if not isinstance(lvl, int):
+            # default to critical level
+            lvl = logging.CRITICAL
+        logger.setLevel(lvl)
+        # did user specify a level?
+        if True:
+            # create a simple handler that prints to stderr
+            handler = logging.StreamHandler(sys.stderr)
+            fmt = '== CUDA [%(relativeCreated)d] %(levelname)5s -- %(message)s'
+            handler.setFormatter(logging.Formatter(fmt=fmt))
+            logger.addHandler(handler)
+        else:
+            # otherwise, put a null handler
+            logger.addHandler(logging.NullHandler())
+    return logger
+
+
+_logger = _make_logger()
+
+
+class _SizeNotSet(object):
+    """
+    Dummy object for _PendingDeallocs when *size* is not set.
+    """
+    def __str__(self):
+        return '?'
+
+    def __int__(self):
+        return 0
+
+
+_SizeNotSet = _SizeNotSet()
+
+
+class _PendingDeallocs(object):
+    """
+    Pending deallocations of a context (or device since we are using the
+    primary context).
+    """
+    def __init__(self, capacity):
+        self._cons = deque()
+        self._disable_count = 0
+        self._size = 0
+        self._memory_capacity = capacity
+
+    @property
+    def _max_pending_bytes(self):
+        return int(self._memory_capacity * 0.5)
+        # return int(self._memory_capacity * config.CUDA_DEALLOCS_RATIO)
+
+    def add_item(self, dtor, handle, size=_SizeNotSet):
+        """
+        Add a pending deallocation.
+
+        The *dtor* arg is the destructor function that takes an argument,
+        *handle*.  It is used as ``dtor(handle)``.  The *size* arg is the byte
+        size of the resource added.  It is an optional argument.  Some
+        resources (e.g. CUModule) has an unknown memory footprint on the
+        device.
+        """
+        _logger.info('add pending dealloc: %s %s bytes', dtor.__name__, size)
+        self._cons.append((dtor, handle, size))
+        self._size += int(size)
+        if self._size > self._max_pending_bytes:
+            self.clear()
+
+    def clear(self):
+        """
+        Flush any pending deallocations unless it is disabled.
+        Do nothing if disabled.
+        """
+        if not self.is_disabled:
+            while self._cons:
+                [dtor, handle, size] = self._cons.popleft()
+                _logger.info('dealloc: %s %s bytes', dtor.__name__, size)
+                dtor(handle)
+            self._size = 0
+
+    @contextlib.contextmanager
+    def disable(self):
+        """
+        Context manager to temporarily disable flushing pending deallocation.
+        This can be nested.
+        """
+        self._disable_count += 1
+        try:
+            yield
+        finally:
+            self._disable_count -= 1
+            assert self._disable_count >= 0
+
+    @property
+    def is_disabled(self):
+        return self._disable_count > 0
+
+    def __len__(self):
+        """
+        Returns number of pending deallocations.
+        """
+        return len(self._cons)
+
+
+def use_rmm_for_numba():
+    cuda.cudadrv.driver.set_memory_manager(RMMNumbaManager)
 
 
 try:
