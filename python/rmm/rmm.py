@@ -21,7 +21,7 @@ from enum import IntEnum
 
 import numpy as np
 from numba import cuda
-from numba.cuda.cudadrv.memory import BaseCUDAMemoryManager
+from numba.cuda.cudadrv.memory import BaseCUDAMemoryManager, MemoryPointer
 from numba.utils import UniqueDict, logger_hasHandlers
 import rmm._lib as librmm
 
@@ -290,7 +290,11 @@ class RMMNumbaManager(BaseCUDAMemoryManager):
         # XXX: Need to support stream being passed in
         stream = 0
         addr = librmm.rmm_alloc(bytesize, stream)
-        return addr
+        ctx = cuda.current_context()
+        ptr = ctypes.c_uint64(int(addr))
+        finalizer = _make_finalizer(addr, stream)
+        mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
+        return mem
 
     def memhostalloc(self, bytesize, mapped, portable, wc):
         raise NotImplementedError
@@ -301,7 +305,8 @@ class RMMNumbaManager(BaseCUDAMemoryManager):
     def prepare_for_use(self, memory_info):
         reinitialize(logging=True)
         if self.deallocations is None:
-            self.deallocations = _PendingDeallocs()
+            free, total = get_info()
+            self.deallocations = _PendingDeallocs(total)
 
 
 def _make_logger():
