@@ -16,6 +16,7 @@ import weakref
 
 from rmm.rmm import (
     RMMError,
+    RMMNumbaManager,
     _finalize,
     _initialize,
     _make_finalizer,
