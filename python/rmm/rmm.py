@@ -21,7 +21,7 @@ from enum import IntEnum
 
 import numpy as np
 from numba import cuda
-from numba.cuda.cudadrv.memory import BaseCUDAMemoryManager, MemoryPointer
+from numba.cuda.cudadrv.memory import HostOnlyCUDAMemoryManager, MemoryPointer
 from numba.utils import UniqueDict, logger_hasHandlers
 import rmm._lib as librmm
 
@@ -280,7 +280,7 @@ def get_info(stream=0):
     return librmm.rmm_getinfo(stream)
 
 
-class RMMNumbaManager(BaseCUDAMemoryManager):
+class RMMNumbaManager(HostOnlyCUDAMemoryManager):
     def __init__(self):
         self.allocations = UniqueDict()
         # Deallocations lazily initialised when context activated
@@ -296,12 +296,6 @@ class RMMNumbaManager(BaseCUDAMemoryManager):
         mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
         print(csv_log())
         return mem
-
-    def memhostalloc(self, bytesize, mapped, portable, wc):
-        raise NotImplementedError
-
-    def mempin(self, owner, pointer, size, mapped):
-        raise NotImplementedError
 
     def prepare_for_use(self, memory_info):
         if self.deallocations is None:
