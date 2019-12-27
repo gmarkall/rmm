@@ -140,21 +140,23 @@ rmmError_t rmmWriteLog(const char* filename)
   return RMM_SUCCESS;
 }
 
-// Get the size opf the CSV log
+// Get the size of the CSV log
 size_t rmmLogSize()
 {
   std::ostringstream csv;
   rmm::Manager::getLogger().to_csv(csv);
-  return csv.str().size();
+  return csv.str().size() + 1;
 }
 
-// Get the CSV log as a string
+// Get the CSV log as a null-terminated string
 rmmError_t rmmGetLog(char *buffer, size_t buffer_size)
 {
   try {
     std::ostringstream csv;
     rmm::Manager::getLogger().to_csv(csv);
-    csv.str().copy(buffer, std::min(buffer_size, csv.str().size()));
+    size_t last = std::min(buffer_size - 1, csv.str().size());
+    csv.str().copy(buffer, last);
+    buffer[last] = '\0';
   }
   catch (const std::ofstream::failure& e) {
     return RMM_ERROR_IO;

@@ -220,6 +220,33 @@ TYPED_TEST(MemoryManagerTest, GetInfo) {
     ASSERT_GE(totalBefore, 0);
 }
 
+TYPED_TEST(MemoryManagerTest, GetLog) {
+    size_t logSize = rmmLogSize();
+    char* buffer = (char*)malloc(sizeof(char) * logSize);
+    rmmGetLog(buffer, logSize);
+
+    // Check that the log string is null-terminated
+    ASSERT_EQ(buffer[logSize - 1], '\0');
+
+    // Reference of the column headers we expect to see at the beginning of the
+    // output
+    const char* columnHeaders = \
+        "Event Type,Device ID,Address,Stream,Size (bytes),Free Memory," \
+        "Total Memory,Current Allocs,Start,End,Elapsed,Location\n";
+
+    // First check that there are at least as many characters in the buffer as
+    // there are in the reference column headers
+    ASSERT_GE(logSize, strlen(columnHeaders + 1));
+
+    // For comparison with the reference column headers, we copy the same number
+    // of bytes from the buffer as there are in the reference column headers
+    char* headerBuffer = (char*)malloc(sizeof(char) * strlen(columnHeaders + 1));
+    strncpy(headerBuffer, buffer, strlen(columnHeaders));
+
+    // Check that the column headers are as expected
+    ASSERT_STREQ(headerBuffer, columnHeaders);
+}
+
 TYPED_TEST(MemoryManagerTest, AllocationOffset) {
     char *a = nullptr, *b = nullptr;
     ptrdiff_t offset = -1;
