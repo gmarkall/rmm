@@ -135,85 +135,6 @@ def csv_log():
     return librmm.rmm_csv_log()
 
 
-def device_array_from_ptr(ptr, nelem, dtype=np.float, finalizer=None):
-    """
-    device_array_from_ptr(ptr, size, dtype=np.float, stream=0)
-
-    Create a Numba device array from a ptr, size, and dtype.
-    """
-    # Handle Datetime Column
-    if dtype == np.datetime64:
-        dtype = np.dtype("datetime64[ms]")
-    else:
-        dtype = np.dtype(dtype)
-
-    elemsize = dtype.itemsize
-    datasize = elemsize * nelem
-    shape = (nelem,)
-    strides = (elemsize,)
-    # note no finalizer -- freed externally!
-    ctx = cuda.current_context()
-    ptr = ctypes.c_uint64(int(ptr))
-    mem = cuda.driver.MemoryPointer(ctx, ptr, datasize, finalizer=finalizer)
-    return cuda.cudadrv.devicearray.DeviceNDArray(
-        shape, strides, dtype, gpu_data=mem
-    )
-
-
-def device_array(shape, dtype=np.float, strides=None, order="C", stream=0):
-    """
-    device_array(shape, dtype=np.float, strides=None, order='C',
-                 stream=0)
-
-    Allocate an empty Numba device array. Clone of Numba `cuda.device_array`,
-    but uses RMM for device memory management.
-    """
-    shape, strides, dtype = cuda.api._prepare_shape_strides_dtype(
-        shape, strides, dtype, order
-    )
-    datasize = cuda.driver.memory_size_from_info(
-        shape, strides, dtype.itemsize
-    )
-
-    buf = librmm.DeviceBuffer(size=datasize, stream=stream)
-
-    ctx = cuda.current_context()
-    ptr = ctypes.c_uint64(int(buf.ptr))
-    mem = cuda.driver.MemoryPointer(ctx, ptr, datasize, owner=buf)
-    return cuda.cudadrv.devicearray.DeviceNDArray(
-        shape, strides, dtype, gpu_data=mem
-    )
-
-
-def device_array_like(ary, stream=0):
-    """
-    device_array_like(ary, stream=0)
-
-    Call rmmlib.device_array with information from `ary`. Clone of Numba
-    `cuda.device_array_like`, but uses RMM for device memory management.
-    """
-    if ary.ndim == 0:
-        ary = ary.reshape(1)
-
-    return device_array(ary.shape, ary.dtype, ary.strides, stream=stream)
-
-
-def to_device(ary, stream=0, copy=True, to=None):
-    """
-    to_device(ary, stream=0, copy=True, to=None)
-
-    Allocate and transfer a numpy ndarray or structured scalar to the device.
-    Clone of Numba `cuda.to_device`, but uses RMM for device memory management.
-    """
-    if to is None:
-        to = device_array_like(ary, stream=stream)
-        to.copy_to_device(ary, stream=stream)
-        return to
-    if copy:
-        to.copy_to_device(ary, stream=stream)
-    return to
-
-
 def get_ipc_handle(ary, stream=0):
     """
     Get an IPC handle from the DeviceArray ary with offset modified by
@@ -252,7 +173,7 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         ptr = ctypes.c_uint64(int(addr))
         finalizer = _make_finalizer(addr, stream)
         mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
-        print(csv_log())
+        #print(csv_log())
         return mem
 
     def prepare_for_use(self, memory_info):
@@ -417,7 +338,7 @@ def _make_finalizer(handle, stream):
         Invoked when the MemoryPointer is freed
         """
         librmm.rmm_free(handle, stream)
-        print(csv_log())
+        #print(csv_log())
 
     return finalizer
 
