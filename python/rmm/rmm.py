@@ -19,7 +19,6 @@ import sys
 from collections import deque
 from enum import IntEnum
 
-import numpy as np
 from numba import cuda
 from numba.cuda.cudadrv.memory import HostOnlyCUDAMemoryManager, MemoryPointer
 from numba.utils import UniqueDict, logger_hasHandlers
@@ -135,22 +134,6 @@ def csv_log():
     return librmm.rmm_csv_log()
 
 
-def get_ipc_handle(ary, stream=0):
-    """
-    Get an IPC handle from the DeviceArray ary with offset modified by
-    the RMM memory pool.
-    """
-    ipch = cuda.devices.get_context().get_ipc_handle(ary.gpu_data)
-    ptr = ary.device_ctypes_pointer.value
-    offset = librmm.rmm_getallocationoffset(ptr, stream)
-    # replace offset with RMM's offset
-    ipch.offset = offset
-    desc = dict(shape=ary.shape, strides=ary.strides, dtype=ary.dtype)
-    return cuda.cudadrv.devicearray.IpcArrayHandle(
-        ipc_handle=ipch, array_desc=desc
-    )
-
-
 def get_info(stream=0):
     """
     Get the free and total bytes of memory managed by a manager associated with
@@ -173,10 +156,32 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         ptr = ctypes.c_uint64(int(addr))
         finalizer = _make_finalizer(addr, stream)
         mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
-        #print(csv_log())
         return mem
 
-    def prepare_for_use(self, memory_info):
+    def get_ipc_handle(self, memory, stream=0):
+        """
+        Get an IPC handle from the DeviceArray ary with offset modified by
+        the RMM memory pool.
+        """
+        # Not a very clean implementation - may want to implement something at
+        # the C++ layer for this, and also not rely on borrowing bits of Numba
+        # internals to initialise ipchandle.
+        ipchandle = (ctypes.c_byte * 64)()  # IPC handle is 64 bytes
+        cuda.cudadrv.memory.driver_funcs.cuIpcGetMemHandle(
+            ctypes.byref(ipchandle),
+            memory.owner.handle,
+        )
+        source_info = cuda.current_context().device.get_device_identity()
+        ptr = memory.device_ctypes_pointer.value
+        offset = librmm.rmm_getallocationoffset(ptr, stream)
+        from numba.cuda.cudadrv.driver import IpcHandle
+        return IpcHandle(memory, ipchandle, memory.size, source_info,
+                         offset=offset)
+
+    def get_memory_info(self):
+        return get_info()
+
+    def prepare_for_use(self):
         if self.deallocations is None:
             reinitialize(logging=True)
             free, total = get_info()
@@ -347,7 +352,6 @@ def _make_finalizer(handle, stream):
         Invoked when the MemoryPointer is freed
         """
         librmm.rmm_free(handle, stream)
-        #print(csv_log())
 
     return finalizer
 

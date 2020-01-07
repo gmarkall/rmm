@@ -21,7 +21,6 @@ from rmm.rmm import (
     _initialize,
     _register_atexit_finalize,
     csv_log,
-    get_ipc_handle,
     get_info,
     is_initialized,
     reinitialize,
