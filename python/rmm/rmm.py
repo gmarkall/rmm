@@ -187,6 +187,9 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
             free, total = get_info()
             self.deallocations = _PendingDeallocs(total)
 
+    def reset(self):
+        reinitialize(logging=True)
+
 
 def _make_logger():
     logger = logging.getLogger(__name__)
