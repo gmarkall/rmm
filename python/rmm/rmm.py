@@ -17,6 +17,7 @@ import ctypes
 import logging
 import sys
 from collections import deque
+from contextlib import contextmanager
 from enum import IntEnum
 
 from numba import cuda
@@ -163,14 +164,12 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         # Deallocations lazily initialised when context activated
         self.deallocations = None
 
-    def memalloc(self, bytesize):
-        # XXX: Need to support stream being passed in
-        stream = 0
-        addr = librmm.rmm_alloc(bytesize, stream)
+    def memalloc(self, nbytes, stream=0):
+        addr = librmm.rmm_alloc(nbytes, stream)
         ctx = cuda.current_context()
         ptr = ctypes.c_uint64(int(addr))
         finalizer = _make_finalizer(addr, stream)
-        mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
+        mem = MemoryPointer(ctx, ptr, nbytes, finalizer=finalizer)
         return mem
 
     def get_ipc_handle(self, memory, stream=0):
@@ -196,7 +195,7 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
     def get_memory_info(self):
         return get_info()
 
-    def prepare_for_use(self):
+    def initialize(self):
         print_rmm_announcement()
         if self.deallocations is None:
             reinitialize(logging=False)
@@ -205,6 +204,15 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
 
     def reset(self):
         reinitialize(logging=False)
+
+    @contextmanager
+    def defer_cleanup(self):
+        with super().defer_cleanup():
+            yield
+
+    @property
+    def interface_version(self):
+        return 1
 
 
 def _make_logger():
