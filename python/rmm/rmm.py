@@ -142,6 +142,21 @@ def get_info(stream=0):
     return librmm.rmm_getinfo(stream)
 
 
+_announced = False
+
+
+def print_rmm_announcement():
+    """
+    The very first time we are called, print out a message so that it is
+    obvious the RMM EMM Plugin is in use (to prevent any uncertainty as to
+    whether Numba really used it.
+    """
+    global _announced
+    if not _announced:
+        print("RMM EMM Plugin in use.")
+        _announced = True
+
+
 class RMMNumbaManager(HostOnlyCUDAMemoryManager):
     def __init__(self):
         self.allocations = UniqueDict()
@@ -182,13 +197,14 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         return get_info()
 
     def prepare_for_use(self):
+        print_rmm_announcement()
         if self.deallocations is None:
-            reinitialize(logging=True)
+            reinitialize(logging=False)
             free, total = get_info()
             self.deallocations = _PendingDeallocs(total)
 
     def reset(self):
-        reinitialize(logging=True)
+        reinitialize(logging=False)
 
 
 def _make_logger():
