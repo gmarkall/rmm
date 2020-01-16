@@ -159,10 +159,10 @@ def print_rmm_announcement():
 
 
 class RMMNumbaManager(HostOnlyCUDAMemoryManager):
-    def __init__(self):
-        self.allocations = UniqueDict()
-        # Deallocations lazily initialised when context activated
-        self.deallocations = None
+    def __init__(self, logging=False):
+        super().__init__()
+        self._initialized = False
+        self._logging = logging
 
     def memalloc(self, nbytes, stream=0):
         addr = librmm.rmm_alloc(nbytes, stream)
@@ -197,13 +197,14 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
 
     def initialize(self):
         print_rmm_announcement()
-        if self.deallocations is None:
-            reinitialize(logging=False)
-            free, total = get_info()
-            self.deallocations = _PendingDeallocs(total)
+        super().initialize()
+        if not self._initialized:
+            reinitialize(logging=self._logging)
+            self._initialized = True
 
     def reset(self):
-        reinitialize(logging=False)
+        super().reset()
+        reinitialize(logging=self._logging)
 
     @contextmanager
     def defer_cleanup(self):
