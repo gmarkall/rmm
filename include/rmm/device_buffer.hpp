@@ -83,7 +83,9 @@ class device_buffer {
         _size{},
         _capacity{},
         _stream{},
-        _mr{rmm::mr::get_default_resource()} {}
+        _mr{rmm::mr::get_default_resource()} {
+    std::cerr << "devbuf empty ctor for " << std::hex << this << std::endl;
+  }
 
 
   /**
@@ -100,6 +102,7 @@ class device_buffer {
       std::size_t size, cudaStream_t stream = 0,
       mr::device_memory_resource* mr = mr::get_default_resource())
       : _stream{stream}, _mr{mr} {
+    std::cerr << "devbuf size ctor for " << std::hex << this << std::endl;
     allocate(size);
   }
 
@@ -121,6 +124,7 @@ class device_buffer {
                 cudaStream_t stream = 0,
                 mr::device_memory_resource* mr = mr::get_default_resource())
       : _stream{stream}, _mr{mr} {
+    std::cerr << "devbuf copy from ptr ctor for " << std::hex << this << std::endl;
     allocate(size);
     copy(source_data, size);
   }
@@ -144,7 +148,9 @@ class device_buffer {
   device_buffer(
       device_buffer const& other, cudaStream_t stream = 0,
       rmm::mr::device_memory_resource* mr = rmm::mr::get_default_resource())
-      : device_buffer{other.data(), other.size(), stream, mr} {}
+      : device_buffer{other.data(), other.size(), stream, mr} {
+    std::cerr << "devbuf deep copy ctor for " << std::hex << this << std::endl;
+  }
 
   /**
    * @brief Constructs a new `device_buffer` by moving the contents of another
@@ -165,6 +171,7 @@ class device_buffer {
         _capacity{other._capacity},
         _stream{other.stream()},
         _mr{other._mr} {
+    std::cerr << "devbuf move ctor for " << std::hex << this << std::endl;
     other._data = nullptr;
     other._size = 0;
     other._capacity = 0;
@@ -193,6 +200,7 @@ class device_buffer {
    * @param other The `device_buffer` to copy.
    */
   device_buffer& operator=(device_buffer const& other) {
+    std::cerr << "devbuf copy assignment for " << std::hex << this << std::endl;
     if (&other != this) {
       // If the current capacity is large enough and the resources are
       // compatible, just reuse the existing memory
@@ -225,6 +233,7 @@ class device_buffer {
    * @param other The `device_buffer` whose contents will be moved.
    */
   device_buffer& operator=(device_buffer&& other) noexcept {
+    std::cerr << "devbuf move assignment for " << std::hex << this << std::endl;
     if (&other != this) {
       deallocate();
 
@@ -250,6 +259,7 @@ class device_buffer {
    * methods.
    */
   ~device_buffer() noexcept {
+    std::cerr << "devbuf dtor for " << std::hex << this << std::endl;
     deallocate();
     _mr = nullptr;
     _stream = 0;

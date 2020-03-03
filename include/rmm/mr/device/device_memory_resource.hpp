@@ -60,8 +60,12 @@ namespace mr {
  */
 class device_memory_resource {
  public:
-  device_memory_resource() = default;
-  virtual ~device_memory_resource() = default;
+  device_memory_resource() {
+    std::cerr << "ctor for " << std::hex << this << std::endl;
+  };
+  virtual ~device_memory_resource() {
+    std::cerr << "dtor for " << std::hex << this << std::endl;
+  }
 
   /**
    * @brief Allocates memory of size at least \p bytes.
@@ -79,6 +83,7 @@ class device_memory_resource {
    * @return void* Pointer to the newly allocated memory
    */
   void* allocate(std::size_t bytes, cudaStream_t stream = 0) {
+    std::cerr << "allocate for " << std::hex << this << std::endl;
     return do_allocate(detail::align_up(bytes, 8), stream);
   }
 
@@ -101,6 +106,7 @@ class device_memory_resource {
    * @param stream Stream on which to perform deallocation
    */
   void deallocate(void* p, std::size_t bytes, cudaStream_t stream = 0) {
+    std::cerr << "deallocate for " << std::hex << this << std::endl;
     do_deallocate(p, detail::align_up(bytes, 8), stream);
   }
 

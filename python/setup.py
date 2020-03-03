@@ -46,7 +46,7 @@ extensions = [
         library_dirs=[get_python_lib(), os.path.join(os.sys.prefix, "lib")],
         libraries=["rmm"],
         language="c++",
-        extra_compile_args=["-std=c++14"],
+        extra_compile_args=["-std=c++14","-g","-O0"],
     )
 ]
 
@@ -68,7 +68,7 @@ setup(
     ],
     # Include the separately-compiled shared library
     setup_requires=["cython"],
-    ext_modules=cythonize(extensions),
+    ext_modules=cythonize(extensions, gdb_debug=True),
     packages=find_packages(include=["rmm", "rmm.*"]),
     package_data={"rmm._lib": ["*.pxd"], "rmm._lib.includes": ["*.pxd"]},
     cmdclass=versioneer.get_cmdclass(),

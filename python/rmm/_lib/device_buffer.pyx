@@ -18,6 +18,7 @@
 # cython: language_level = 3
 
 
+import ctypes
 import numpy as np
 
 from libcpp.memory cimport unique_ptr
@@ -104,6 +105,10 @@ cdef class DeviceBuffer:
     @property
     def ptr(self):
         return int(<uintptr_t>self.c_data())
+
+    @property
+    def handle(self):
+        return ctypes.c_ulong(self.ptr)
 
     @property
     def size(self):

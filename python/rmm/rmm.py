@@ -145,6 +145,7 @@ except Exception:
     _numba_memory_manager = None
 
 if numba:
+
     class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         def __init__(self, logging=False):
             super().__init__()
@@ -155,7 +156,8 @@ if numba:
             buf = librmm.DeviceBuffer(size=nbytes, stream=stream)
             ctx = cuda.current_context()
             ptr = ctypes.c_uint64(int(buf.ptr))
-            mem = MemoryPointer(ctx, ptr, nbytes, owner=buf)
+            mem = MemoryPointer(ctx, ptr, nbytes,
+                                finalizer=_make_finalizer(buf, self._bufs))
             return mem
 
         def get_ipc_handle(self, memory, stream=0):
@@ -182,12 +184,16 @@ if numba:
             return get_info()
 
         def initialize(self):
+            print("Initialize called")
             super().initialize()
             if not self._initialized:
+                self._bufs = dict()
                 reinitialize(logging=self._logging)
                 self._initialized = True
 
         def reset(self):
+            print("Reset called")
+            self._bufs = dict()
             super().reset()
             reinitialize(logging=self._logging)
 
@@ -239,18 +245,21 @@ def rmm_cupy_allocator(nbytes):
     return ptr
 
 
-def _make_finalizer(handle, stream):
+def _make_finalizer(buf, bufs):
     """
     Factory to make the finalizer function.
     We need to bind *handle* and *stream* into the actual finalizer, which
     takes no args.
     """
 
+    k = int(buf.ptr)
+    bufs[k] = buf
+
     def finalizer():
         """
         Invoked when the MemoryPointer is freed
         """
-        librmm.rmm_free(handle, stream)
+        del bufs[k]
 
     return finalizer
 

@@ -34,6 +34,9 @@ class cuda_memory_resource final : public device_memory_resource {
  public:
   bool supports_streams() const noexcept override { return false; }
 
+  cuda_memory_resource() : device_memory_resource() {
+    std::cerr << "cuda ctor for " << std::hex << this << std::endl;
+  };
  private:
   /**
    * @brief Allocates memory of size at least `bytes` using cudaMalloc.
