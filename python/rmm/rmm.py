@@ -142,7 +142,6 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         pass
 
     def memalloc(self, bytesize):
-        # XXX: Need to support stream being passed in
         stream = 0
         addr = librmm.rmm_alloc(bytesize, stream)
         ctx = cuda.current_context()
@@ -151,13 +150,14 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
         return mem
 
-    def get_ipc_handle(ary, stream=0):
+    def get_ipc_handle(ary):
         """
         Get an IPC handle from the DeviceArray ary with offset modified by
         the RMM memory pool.
         """
         ipch = cuda.devices.get_context().get_ipc_handle(ary.gpu_data)
         ptr = ary.device_ctypes_pointer.value
+        stream = 0
         offset = librmm.rmm_getallocationoffset(ptr, stream)
         # replace offset with RMM's offset
         ipch.offset = offset
