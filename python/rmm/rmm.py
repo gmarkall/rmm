@@ -16,7 +16,7 @@ import ctypes
 from enum import IntEnum
 
 from numba import cuda
-from numba.cuda import HostOnlyCUDAMemoryManager, MemoryPointer
+from numba.cuda import HostOnlyCUDAMemoryManager, IpcHandle, MemoryPointer
 import rmm._lib as librmm
 
 
@@ -138,10 +138,22 @@ def get_info(stream=0):
 
 
 class RMMNumbaManager(HostOnlyCUDAMemoryManager):
+    """
+    External Memory Management Plugin implementation for Numba. Provides
+    on-device allocation only.
+
+    See http://numba.pydata.org/numba-doc/latest/cuda/external-memory.html for
+    details of the interface being implemented here.
+    """
+
     def initialize(self):
+        # No special initialization needed to use RMM within a given context.
         pass
 
     def memalloc(self, bytesize):
+        """
+        Allocate an on-device array from the RMM pool.
+        """
         stream = 0
         addr = librmm.rmm_alloc(bytesize, stream)
         ctx = cuda.current_context()
@@ -150,21 +162,21 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         mem = MemoryPointer(ctx, ptr, bytesize, finalizer=finalizer)
         return mem
 
-    def get_ipc_handle(ary):
+    def get_ipc_handle(self, memory):
         """
         Get an IPC handle from the DeviceArray ary with offset modified by
         the RMM memory pool.
         """
-        ipch = cuda.devices.get_context().get_ipc_handle(ary.gpu_data)
-        ptr = ary.device_ctypes_pointer.value
-        stream = 0
-        offset = librmm.rmm_getallocationoffset(ptr, stream)
-        # replace offset with RMM's offset
-        ipch.offset = offset
-        desc = dict(shape=ary.shape, strides=ary.strides, dtype=ary.dtype)
-        return cuda.cudadrv.devicearray.IpcArrayHandle(
-            ipc_handle=ipch, array_desc=desc
+        ipchandle = (ctypes.c_byte * 64)()  # IPC handle is 64 bytes
+        cuda.cudadrv.driver.driver.cuIpcGetMemHandle(
+            ctypes.byref(ipchandle),
+            memory.owner.handle,
         )
+        source_info = cuda.current_context().device.get_device_identity()
+        ptr = memory.device_ctypes_pointer.value
+        offset = librmm.rmm_getallocationoffset(ptr, 0)
+        return IpcHandle(memory, ipchandle, memory.size, source_info,
+                         offset=offset)
 
     def get_memory_info(self):
         return get_info()
@@ -174,8 +186,10 @@ class RMMNumbaManager(HostOnlyCUDAMemoryManager):
         return 1
 
 
-def use_rmm_for_numba():
-    cuda.set_memory_manager(RMMNumbaManager)
+# Enables the use of RMM for Numba via an environment variable setting,
+# NUMBA_CUDA_MEMORY_MANAGER=rmm. See:
+# http://numba.pydata.org/numba-doc/latest/cuda/external-memory.html#environment-variable
+_numba_memory_manager = RMMNumbaManager
 
 
 try:

@@ -8,7 +8,7 @@ import pytest
 import rmm
 from numba import cuda
 
-rmm.use_rmm_for_numba()
+cuda.set_memory_manager(rmm.RMMNumbaManager)
 
 
 def array_tester(dtype, nelem):
